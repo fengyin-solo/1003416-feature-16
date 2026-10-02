@@ -35,3 +35,11 @@ body { margin: 0; background: #f6f8fb; color: #1f2937; }
 .error-text { color: #b42318; }
 .status-legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 0 0 10px; font-size: 12px; color: var(--muted); }
 .legend-item { background: #eef2f7; border-radius: 999px; padding: 2px 10px; }
+.dialog-mask { position: fixed; inset: 0; background: rgba(15, 23, 42, 0.35); display: flex; align-items: center; justify-content: center; z-index: 10; }
+.dialog { background: #fff; border-radius: 8px; padding: 16px; width: 360px; display: flex; flex-direction: column; gap: 10px; }
+.dialog h3 { margin: 0; font-size: 15px; }
+.dialog label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.dialog input, .dialog select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+.dialog-tip { margin: 0; font-size: 12px; color: var(--muted); }
+.dialog-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.notice-text { color: #027a48; }
