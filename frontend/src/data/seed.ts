@@ -662,6 +662,20 @@ export const SEED_ROWS: Record<string, EntryRow[]> = {
       "林带状态": "防火林带样例3"
     }
   ],
+  "firebelt-ops-ledger": [
+    {
+      "id": 1,
+      "status": "完好",
+      "pending": false,
+      "abnormal": false,
+      "林带编号": "FIRE-0001",
+      "林带名称": "防火林带样例1",
+      "验收结论": "完好",
+      "验收标准": "成活率≥80%判定完好（2024版）",
+      "验收时间": "2025-04-12",
+      "流转结果": "林带转「完好」"
+    }
+  ],
   "drill": [
     {
       "id": 1,

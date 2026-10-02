@@ -47,7 +47,7 @@
           <td>{{ row.status }}</td>
           <td class="row-actions">
             <button
-              v-for="action in actions"
+              v-for="action in actionsFor(row)"
               :key="action"
               class="link"
               type="button"
@@ -55,6 +55,7 @@
             >
               {{ action }}
             </button>
+            <button class="link" type="button" @click="openEdit(row)">补录信息</button>
           </td>
         </tr>
         <tr v-if="!rows.length">
@@ -65,8 +66,37 @@
 
     <footer class="page-foot">
       <span>共 {{ total }} 条防火林带记录</span>
+      <span v-if="noticeMessage" class="ok-text">{{ noticeMessage }}</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
     </footer>
+
+    <div v-if="acceptingRow" class="modal-mask">
+      <div class="modal-card">
+        <h3>完好验收 · {{ acceptingRow.林带名称 }}</h3>
+        <p>{{ acceptanceStandard }}</p>
+        <p>验收结论会写入运营缺株台账并按当前标准留存；验收通过将联动防火隔离带新增一条维护待办。</p>
+        <div class="modal-actions">
+          <button class="btn primary" type="button" @click="submitAcceptance('完好')">验收通过（完好）</button>
+          <button class="btn" type="button" @click="submitAcceptance('部分成活')">部分成活（转有缺株）</button>
+          <button class="btn ghost" type="button" @click="acceptingRow = null">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="editingRow" class="modal-mask">
+      <div class="modal-card">
+        <h3>补录林带信息 · {{ editingRow.林带编号 }}</h3>
+        <label v-for="field in editableFields" :key="field" class="modal-field">
+          <span>{{ field }}</span>
+          <input v-model="editForm[field]" :placeholder="`填写${field}`" />
+        </label>
+        <p>确认补植前必须保存林带名称、树种组成和林带宽度。</p>
+        <div class="modal-actions">
+          <button class="btn primary" type="button" @click="saveEdit">保存</button>
+          <button class="btn ghost" type="button" @click="editingRow = null">取消</button>
+        </div>
+      </div>
+    </div>
   </section>
 </template>
 
@@ -74,30 +104,52 @@
 import { computed, onMounted, ref } from 'vue'
 
 import {
+  currentAcceptanceStandard,
   downloadEntries,
   listEntries,
   moduleMeta,
   runAction as applyAction,
+  saveEntryFields,
 } from '@/api/local-service'
 import type { EntryRow } from '@/data/types'
 
 const meta = moduleMeta('firebelt')
 const columns = ["林带编号", "林带名称", "所属林区", "树种组成", "林带长度", "林带宽度", "种植年份", "林带状态"]
-const actions = ["安排补植", "确认补植", "标记退化"]
-const statuses = ["完好", "有缺株", "需补植", "已退化"]
-const stats = [{"label": "林带总数", "value": 0}, {"label": "完好条数", "value": 0}, {"label": "缺株条数", "value": 0}]
+const actions = ["安排补植", "确认补植", "完好验收", "标记退化"]
+const statuses = ["完好", "有缺株", "需补植", "待验收", "已退化"]
+const editableFields = ["林带名称", "树种组成", "林带宽度"]
+const acceptanceStandard = currentAcceptanceStandard()
 
 const rows = ref<EntryRow[]>([])
 const total = ref(0)
 const errorMessage = ref('')
+const noticeMessage = ref('')
 const filters = ref<Record<string, string>>({})
 const filterFields = columns.slice(0, 3)
+const acceptingRow = ref<EntryRow | null>(null)
+const editingRow = ref<EntryRow | null>(null)
+const editForm = ref<Record<string, string>>({})
+
+const stats = computed(() => [
+  { label: '林带总数', value: rows.value.length },
+  { label: '完好条数', value: rows.value.filter((row) => String(row.status) === '完好').length },
+  { label: '缺株条数', value: rows.value.filter((row) => String(row.status) === '有缺株').length },
+])
 const statusSummary = computed(() =>
   statuses.map((status: string) => ({
     status,
     count: rows.value.filter((row) => String(row.status) === status).length,
   })),
 )
+
+// 单向流转：只展示当前状态下允许执行的动作，能否流转最终由数据层校验。
+function actionsFor(row: EntryRow): string[] {
+  const sources = meta.actionSources ?? {}
+  return actions.filter((action) => {
+    const from = sources[action]
+    return !from || from.includes(String(row.status))
+  })
+}
 
 function resetFilters() {
   filters.value = {}
@@ -114,11 +166,54 @@ function openCreate() {
 
 function runAction(action: string, row: EntryRow) {
   errorMessage.value = ''
+  noticeMessage.value = ''
+  if (action === '完好验收') {
+    acceptingRow.value = row
+    return
+  }
   const result = applyAction(meta.key, Number(row.id), action)
   if (!result.ok) {
     errorMessage.value = result.message
     return
   }
+  noticeMessage.value = result.message
+  reload()
+}
+
+function submitAcceptance(conclusion: string) {
+  const row = acceptingRow.value
+  acceptingRow.value = null
+  if (!row) {
+    return
+  }
+  const result = applyAction(meta.key, Number(row.id), '完好验收', { conclusion })
+  if (!result.ok) {
+    errorMessage.value = result.message
+    return
+  }
+  noticeMessage.value = result.message
+  reload()
+}
+
+function openEdit(row: EntryRow) {
+  errorMessage.value = ''
+  noticeMessage.value = ''
+  editingRow.value = row
+  editForm.value = Object.fromEntries(editableFields.map((field) => [field, String(row[field] ?? '')]))
+}
+
+function saveEdit() {
+  const row = editingRow.value
+  editingRow.value = null
+  if (!row) {
+    return
+  }
+  const result = saveEntryFields(meta.key, Number(row.id), editForm.value)
+  if (!result.ok) {
+    errorMessage.value = result.message
+    return
+  }
+  noticeMessage.value = result.message
   reload()
 }
 
